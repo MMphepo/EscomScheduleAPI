@@ -29,7 +29,7 @@ class ProgramSerializer(serializers.ModelSerializer):
 
     def to_internal_value(self, data):
         # Custom date parsing for `schedule_date`
-        date_formats = ["%Y-%m-%d","%d %m %y", "%d-%m-%Y", "%m/%d/%Y","%d/%m/%Y", "%Y/%m/%d", "%Y.%m.%d", "%d.%m.%Y","%B %d, %Y", "%d %B %Y", "%b %d, %Y", "%d %b %Y"     # 12 Nov 2024
+        date_formats = ["%Y-%m-%d", "%d %m %y", "%d-%m-%Y", "%m/%d/%Y","%d/%m/%Y", "%Y/%m/%d", "%Y.%m.%d", "%d.%m.%Y","%B %d, %Y", "%d %B %Y", "%b %d, %Y", "%d %b %Y"     # 12 Nov 2024
 ]
         schedule_date = data.get("schedule_date")
         
