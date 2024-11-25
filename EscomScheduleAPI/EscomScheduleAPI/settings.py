@@ -25,7 +25,9 @@ SECRET_KEY = "django-insecure-&u6irpj2y7m&#_pg8mpwe)9o1_#43o+%$b_q+^tt3ureif!qc-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "escom-schedule-api.onrender.com"
+]
 
 
 # Application definition
