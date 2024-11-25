@@ -3,10 +3,9 @@ import json
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response
-
+from .models import Groups, Region
 from rest_framework import status
-from .models import Program
-from .serializers import ProgramSerializer
+
 
 class ProgramView(APIView):
     def post(self, request):
@@ -23,7 +22,21 @@ class ProgramView(APIView):
             grpids.append(grpid)
             regiontypes.append(regiontype) 
         print(grpids)
+        print(regiontypes)
         
+        # for name in set(grpids):  # Use `set` to avoid duplicate entries
+        #     group, created = Groups.objects.get_or_create(group_name=name)
+        #     if created:
+        #         print(f"Inserted: {group.group_name}")
+        #     else:
+        #         print(f"Skipped (already exists): {group.group_name}")
+        
+        for name in set(regiontypes):  # Use `set` to avoid duplicate entries
+            region, created = Region.objects.get_or_create(region_name=name)
+            if created:
+                print(f"Inserted: {region.region_name}")
+            else:
+                print(f"Skipped (already exists): {region.region_name}")
         affectedAreas = []
         allAreas = []
         locations = []
@@ -47,7 +60,9 @@ class ProgramView(APIView):
         
         print("absolutely all areas--",allAreas)
 
-            
+        groups = Groups.objects.all()
+        for group in groups:
+            print(group.group_name)
         # data_cleaning = Datacleaning()
         # data_cleaning.clean_spaces(groups)
         

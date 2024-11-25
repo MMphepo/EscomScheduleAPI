@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import ProgramView
+from .views import  ProgramView
 
 urlpatterns = [
-    path('programs/', ProgramView.as_view(), name='program-list'),
+     path('programs/', ProgramView.as_view(), name='program-list'),
+
 ]
