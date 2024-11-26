@@ -27,8 +27,11 @@ SECRET_KEY = "django-insecure-&u6irpj2y7m&#_pg8mpwe)9o1_#43o+%$b_q+^tt3ureif!qc-
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "escom-schedule-api.onrender.com"
+    "escom-schedule-api.onrender.com",
+    "localhost",
+    "127.0.0.1",
 ]
+
 PORT = os.getenv('PORT', 8000)  # Default to 8000 locally
 
 # Application definition
@@ -81,7 +84,7 @@ WSGI_APPLICATION = "EscomScheduleAPI.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": BASE_DIR / "db_test.sqlite3",
     }
 }
 
