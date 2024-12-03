@@ -8,30 +8,30 @@ from .serializers import GroupsSerializer, LocationSerializer, GrpRegionSerializ
 from rest_framework import status
 from django.db import transaction, connection
 
-def InsertAffectedAreas(location):
+# def InsertAffectedAreas(location):
 
-    # Example areas and their corresponding locations
-    try:
-        for location_name, area_names in areas.items():
-            try:
-                # Fetch the location object
-                location = Location.objects.get(location_name=location_name)
+#     # Example areas and their corresponding locations
+#     try:
+#         for location_name, area_names in areas.items():
+#             try:
+#                 # Fetch the location object
+#                 location = Location.objects.get(location_name=location_name)
                 
-                for area_name in area_names:
-                    try:
-                        with transaction.atomic():
-                            # Check if the area already exists for the location
-                            if not Areas.objects.filter(area_name=area_name, location=location).exists():
-                                Areas.objects.create(area_name=area_name, location=location)
-                                print(f"Area '{area_name}' added successfully under location '{location_name}'.")
-                            else:
-                                print(f"Area '{area_name}' already exists under location '{location_name}'.")
-                    except Exception as e:
-                        print(f"An error occurred while processing area '{area_name}' under location '{location_name}': {e}")
-            except Location.DoesNotExist:
-                print(f"Location '{location_name}' does not exist.")
-    finally:
-        connection.close()  # Close the database connection
+#                 for area_name in area_names:
+#                     try:
+#                         with transaction.atomic():
+#                             # Check if the area already exists for the location
+#                             if not Areas.objects.filter(area_name=area_name, location=location).exists():
+#                                 Areas.objects.create(area_name=area_name, location=location)
+#                                 print(f"Area '{area_name}' added successfully under location '{location_name}'.")
+#                             else:
+#                                 print(f"Area '{area_name}' already exists under location '{location_name}'.")
+#                     except Exception as e:
+#                         print(f"An error occurred while processing area '{area_name}' under location '{location_name}': {e}")
+#             except Location.DoesNotExist:
+#                 print(f"Location '{location_name}' does not exist.")
+#     finally:
+#         connection.close()  # Close the database connection
 
     
 class ProgramView(APIView):
@@ -223,31 +223,32 @@ class ProgramView(APIView):
         #     return Response(serializer.data, status=status.HTTP_201_CREATED)
         # return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class Groups(APIView):
+
+class Groupss(APIView):
     def get(self, request):
         groups = Groups.objects.all()
         serializer = GroupsSerializer(groups, many=True)  # Serialize queryset
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class Areas(APIView):
+class Areass(APIView):
     def get(self, request):
         areas = Areas.objects.all()
         serializer = AreasSerializer(areas, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-class Regions(APIView):
+class Regionss(APIView):
     def get(self, request):
         regions = Region.objects.all()
         serializer = RegionSerializer(regions, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-class GroupRegions(APIView):
+class GroupRegionss(APIView):
     def get(self, request):
         group_regions = GrpRegion.objects.all()
         serializer = GrpRegionSerializer(group_regions, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-class Locations(APIView):
+class Locationss(APIView):
     def get(self, request):
         locations = Location.objects.all()
         serializer = LocationSerializer(locations, many=True)
