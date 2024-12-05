@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fetch and Display JSON</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #data {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        pre {
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Fetch and Display JSON Data</h1>
+    <button onclick="fetchAreas()">Fetch Data</button>
+
+    <div id="data">
+        <h2>Data:</h2>
+        <pre id="json-output">Click the button to fetch data.</pre>
+    </div>
+
+    <script>
+        function fetchAreas() {
+            const apiUrl = "http://127.0.0.1:8000/api/groups/";
+            const output = document.getElementById("json-output");
+
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    output.textContent = JSON.stringify(data, null, 2); // Format JSON with indentation
+                })
+                .catch(error => {
+                    output.textContent = `Error fetching data: ${error.message}`;
+                });
+        }
+    </script>
+
+</body>
+</html>

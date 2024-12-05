@@ -27,9 +27,15 @@ class LocationSerializer(serializers.ModelSerializer):
         model = Location
         fields = ['location_id', 'region', 'location_name']
 
+class LocationIDSerializer(serializers.ModelSerializer):
+    region = RegionSerializer()
 
+    class Meta:
+        model = Location
+        fields = ['location_id']
+        
 class AreasSerializer(serializers.ModelSerializer):
-    location = LocationSerializer()
+    location = LocationIDSerializer()
 
     class Meta:
         model = Areas
