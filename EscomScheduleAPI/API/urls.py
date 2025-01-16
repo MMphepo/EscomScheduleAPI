@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import  ProgramView, Groupss, Areass, GroupRegionss, Locationss, Regionss
+from .views import  ProgramView, Groupss, Areass, GroupRegionss, Locationss, Regionss, LocationByGroupAndRegion
 
 urlpatterns = [
      path('programs/', ProgramView.as_view(), name='program-list'),
@@ -8,4 +8,5 @@ urlpatterns = [
      path('group-regions/', GroupRegionss.as_view(), name='get_group_regions'),
      path('locations/', Locationss.as_view(), name='get_locations'),
      path('areas/', Areass.as_view(), name='get_areas'),
+     path('locations/<str:group_name>/<str:region_name>/', LocationByGroupAndRegion.as_view(), name='location_by_area_and_region'),
 ]

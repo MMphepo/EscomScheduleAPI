@@ -1,6 +1,8 @@
 from django.shortcuts import render
+from django.shortcuts import get_object_or_404
 import json
 # Create your views here.
+from psycopg2 import IntegrityError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import Groups, Region, Location, GrpRegion, Areas
@@ -67,6 +69,27 @@ class ProgramView(APIView):
         affectedAreas = []
         allAreas = []
         locations = []
+          # Insert into GrpRegion model
+        for grpid, regiontype in zip(grpids, regiontypes):
+            try:
+                group = Groups.objects.get(group_name=grpid)
+                region = Region.objects.get(region_name=regiontype)
+                
+                # Check and insert into GrpRegion
+                grp_region, created = GrpRegion.objects.get_or_create(group=group, region=region)
+                if created:
+                    print(f"Inserted GrpRegion: {group.group_name} - {region.region_name}")
+                else:
+                    print(f"Skipped GrpRegion (already exists): {group.group_name} - {region.region_name}")
+            
+            except Groups.DoesNotExist:
+                print(f"Group '{grpid}' does not exist.")
+            except Region.DoesNotExist:
+                print(f"Region '{regiontype}' does not exist.")
+            except IntegrityError as e:
+                print(f"Integrity error occurred: {e}")
+            except Exception as e:
+                print(f"An error occurred: {e}")
         # Loop through all groups and print affected areas and locations
         for id in groups:
             affectedArea = groups[id]["affected_areas"]
@@ -251,5 +274,43 @@ class GroupRegionss(APIView):
 class Locationss(APIView):
     def get(self, request):
         locations = Location.objects.all()
+        serializer = LocationSerializer(locations, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+
+class LocationByGroupAndRegion(APIView):
+    def get(self, request, group_name, region_name):
+        # Fetch the group and region from the database
+        group = get_object_or_404(Groups, group_name=group_name)
+        region = get_object_or_404(Region, region_name=region_name)
+        
+        print("Group:", group)
+        print("Region:", region)
+
+        # Retrieve the IDs for the group and region
+        group_id = group.group_id  # Assuming 'group_id' is the primary key in Groups
+        region_id = region.region_id  # Assuming 'region_id' is the primary key in Region
+        print ("group_id", group_id, "region_id", region_id)
+
+        # Check if a GrpRegion entry exists for this group-region pair
+        try:
+            grp_region = GrpRegion.objects.get(group_id=group_id, region_id=region_id)
+            print("GrpRegion:", grp_region)
+        except GrpRegion.DoesNotExist:
+            return Response(
+                {"error": "The group-region combination does not exist."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Retrieve the locations associated with this region
+        locations = Location.objects.filter(region=region)
+        if not locations.exists():
+            return Response(
+                {"message": "No locations found for the provided group and region."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Serialize and return the locations
         serializer = LocationSerializer(locations, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
