@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import  ProgramView, Groupss, Areass, GroupRegionss, Locationss, Regionss, LocationByGroupAndRegion
+from .views import  ProgramView, Groupss, Areass, GroupRegionss, Locationss, Regionss, LocationByGroupAndRegion, AreaByGroupRegionLocation
 
 urlpatterns = [
      path('programs/', ProgramView.as_view(), name='program-list'),
