@@ -314,3 +314,55 @@ class LocationByGroupAndRegion(APIView):
         # Serialize and return the locations
         serializer = LocationSerializer(locations, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+class AreaByGroupRegionLocation(APIView):
+    def get(self, request, group_name, region_name, location_name):
+        try:
+            # First verify if the group-region combination exists
+            group = Groups.objects.get(group_name=group_name)
+            region = Region.objects.get(region_name=region_name)
+            grp_region = GrpRegion.objects.filter(
+                group=group,
+                region=region
+            ).first()
+            
+            if not grp_region:
+                return Response(
+                    {"error": "Invalid group and region combination"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get the location
+            location = Location.objects.filter(
+                region=region,
+                location_name=location_name
+            ).first()
+            
+            if not location:
+                return Response(
+                    {"error": "Location not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get areas for this location
+            areas = Areas.objects.filter(location=location)
+            serializer = AreasSerializer(areas, many=True)
+            
+            return Response(serializer.data)
+
+        except Groups.DoesNotExist:
+            return Response(
+                {"error": "Group not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Region.DoesNotExist:
+            return Response(
+                {"error": "Region not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
