@@ -139,6 +139,7 @@ CORS_ALLOWED_ORIGINS = [
     # "http://127.0.0.1:5500",
     # "http://localhost:5500",
     "http://127.0.0.1:8000",
+    "http://127.0.0.1:5000",
     # "http://localhost:6334",
     "https://escom-app-starter.vercel.app" # Add more as needed
 ]

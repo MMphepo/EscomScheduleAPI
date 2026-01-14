@@ -38,204 +38,172 @@ from django.db import transaction, connection
     
 class ProgramView(APIView):
     def post(self, request):
+        print("DEBUG: Entered ProgramView.post")
         json_data = request.data
-        data = json_data["data"]
-        groups = data["groups"]
+        print("DEBUG: request.data type=", type(json_data))
+        try:
+            data = json_data["data"]
+        except Exception as e:
+            print("DEBUG: Failed to extract 'data' from request.data:", e)
+            return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
+
+        print("DEBUG: extracted 'data' keys:", list(data.keys()) if isinstance(data, dict) else None)
+        groups = data.get("groups", {})
+        print("DEBUG: raw groups count=", len(groups) if isinstance(groups, dict) else 0)
         groups = {oldkey.replace(' ', ''): newkey for oldkey, newkey in groups.items()}
-        grpkeys=groups.keys()
+        print("DEBUG: normalized groups keys sample=", list(groups.keys())[:5])
+        grpkeys = groups.keys()
         grpids = []
         regiontypes = []
         for key in grpkeys:
-            grpid = key[:7] # 'GROUPA2' 
-            regiontype = key[8:] # 'SOUTHERNREGION' 
+            grpid = key[:7]  # 'GROUPA2'
+            regiontype = key[8:]
             grpids.append(grpid)
-            regiontypes.append(regiontype) 
-        #print(grpids)
-        print(regiontypes)
+            regiontypes.append(regiontype)
+        print("DEBUG: parsed grpids=", grpids)
+        print("DEBUG: parsed regiontypes=", regiontypes)
 
         for name in set(grpids):  # Use `set` to avoid duplicate entries
             group, created = Groups.objects.get_or_create(group_name=name)
-            if created:
-                print(f"Inserted: {group.group_name}")
-            else:
-                print(f"Skipped (already exists): {group.group_name}")
-        
+            print(f"DEBUG: group {name} ensured (created={created})")
+
         for name in set(regiontypes):  # Use `set` to avoid duplicate entries
             region, created = Region.objects.get_or_create(region_name=name)
-            if created:
-                print(f"Inserted: {region.region_name}")
-            else:
-                print(f"Skipped (already exists): {region.region_name}")
+            print(f"DEBUG: region {name} ensured (created={created})")
+
         affectedAreas = []
         allAreas = []
         locations = []
-          # Insert into GrpRegion model
+
+        # Insert into GrpRegion model
         for grpid, regiontype in zip(grpids, regiontypes):
+            print(f"DEBUG: Processing GrpRegion pair: {grpid} - {regiontype}")
             try:
                 group = Groups.objects.get(group_name=grpid)
                 region = Region.objects.get(region_name=regiontype)
-                
-                # Check and insert into GrpRegion
+
                 grp_region, created = GrpRegion.objects.get_or_create(group=group, region=region)
-                if created:
-                    print(f"Inserted GrpRegion: {group.group_name} - {region.region_name}")
-                else:
-                    print(f"Skipped GrpRegion (already exists): {group.group_name} - {region.region_name}")
-            
+                print(f"DEBUG: GrpRegion {grpid}-{regiontype} (created={created})")
+
             except Groups.DoesNotExist:
-                print(f"Group '{grpid}' does not exist.")
+                print(f"DEBUG: Group '{grpid}' does not exist.")
             except Region.DoesNotExist:
-                print(f"Region '{regiontype}' does not exist.")
+                print(f"DEBUG: Region '{regiontype}' does not exist.")
             except IntegrityError as e:
-                print(f"Integrity error occurred: {e}")
+                print(f"DEBUG: Integrity error occurred: {e}")
             except Exception as e:
-                print(f"An error occurred: {e}")
+                print(f"DEBUG: Unexpected error in GrpRegion loop: {e}")
+
         # Loop through all groups and print affected areas and locations
         for id in groups:
-            affectedArea = groups[id]["affected_areas"]
-            
-            print("the current region = ", id)
-            #print("-------------------affected areas-----------")
-            #print(affectedAarea)
+            print(f"DEBUG: Processing group key: {id}")
+            affectedArea = groups[id].get("affected_areas", {})
+            print("DEBUG: affectedArea keys count=", len(affectedArea) if isinstance(affectedArea, dict) else 0)
             affectedAreas.append(affectedArea)
-            
-            print("------------locations--------------------")
+
+            print("DEBUG: Collecting locations for this group")
             location = affectedArea.keys()
             locations.append(location)
-            print(locations)
-            
+            print("DEBUG: current locations list sample=", list(location)[:5])
+
+            # handle region-specific insertion
             if id in ["GROUPA1–NORTHERNREGION", "GROUPB1–NORTHERNREGION", "GROUPC1–NORTHERNREGION"]:
-                print("northern")
+                print("DEBUG: northern branch for", id)
                 region_name = "NORTHERNREGION"
-                
                 try:
-                    # Get the region object (and its id) based on the region_name
                     region = Region.objects.get(region_name=region_name)
-                    
-                    # Loop through unique locations and check if they exist
                     for singleLocation in location:
                         location_name = singleLocation
-
-                        # Check if the location already exists
                         if not Location.objects.filter(location_name=location_name, region=region).exists():
-                            # Create the location if it doesn't exist
                             Location.objects.create(location_name=location_name, region=region)
-                            print(f"Location '{location_name}' added successfully under region '{region_name}' (Region ID: {region.region_id}).")
+                            print(f"DEBUG: Created Location '{location_name}' under {region_name}")
                         else:
-                            print(f"Location '{location_name}' already exists under region '{region_name}'.")
-                
+                            print(f"DEBUG: Location '{location_name}' already exists under {region_name}")
                 except Region.DoesNotExist:
-                    print(f"Region with name '{region_name}' does not exist.")
+                    print(f"DEBUG: Region '{region_name}' missing")
                 except Exception as e:
-                    print(f"An error occurred: {e}")
-            
-            if(id == "GROUPA1–CENTRALREGION" or id == "GROUPB1–CENTRALREGION" or id =="GROUPB2–CENTRALREGION" or id == "GROUPC1–CENTRALREGION" or id == "GROUPC2–CENTRALREGION"):
-                print("central") 
+                    print(f"DEBUG: Error in northern branch: {e}")
+
+            if id in ("GROUPA1–CENTRALREGION", "GROUPB1–CENTRALREGION", "GROUPB2–CENTRALREGION", "GROUPC1–CENTRALREGION", "GROUPC2–CENTRALREGION"):
+                print("DEBUG: central branch for", id)
                 region_name = "CENTRALREGION"
-                
                 try:
-                    # Get the region object (and its id) based on the region_name
                     region = Region.objects.get(region_name=region_name)
-                    
-                    # Loop through unique locations and check if they exist
                     for singleLocation in location:
                         location_name = singleLocation
-
-                        # Check if the location already exists
                         if not Location.objects.filter(location_name=location_name, region=region).exists():
-                            # Create the location if it doesn't exist
                             Location.objects.create(location_name=location_name, region=region)
-                            print(f"Location '{location_name}' added successfully under region '{region_name}' (Region ID: {region.region_id}).")
+                            print(f"DEBUG: Created Location '{location_name}' under {region_name}")
                         else:
-                            print(f"Location '{location_name}' already exists under region '{region_name}'.")
-                
+                            print(f"DEBUG: Location '{location_name}' already exists under {region_name}")
                 except Region.DoesNotExist:
-                    print(f"Region with name '{region_name}' does not exist.")
+                    print(f"DEBUG: Region '{region_name}' missing")
                 except Exception as e:
-                    print(f"An error occurred: {e}")
-            
-            if(id == "GROUPA1–SOUTHERNREGION" or id == "GROUPA2–SOUTHERNREGION" or id == "GROUPB1–SOUTHERNREGION" or id == "GROUPB2–SOUTHERNREGION" or id == "GROUPC2–SOUTHERNREGION"):
-                print("southen")
+                    print(f"DEBUG: Error in central branch: {e}")
+
+            if id in ("GROUPA1–SOUTHERNREGION", "GROUPA2–SOUTHERNREGION", "GROUPB1–SOUTHERNREGION", "GROUPB2–SOUTHERNREGION", "GROUPC2–SOUTHERNREGION"):
+                print("DEBUG: southern branch for", id)
                 region_name = "SOUTHERNREGION"
-                
                 try:
-                    # Get the region object (and its id) based on the region_name
                     region = Region.objects.get(region_name=region_name)
-                    
-                    # Loop through unique locations and check if they exist
                     for singleLocation in set(location):
                         location_name = singleLocation
-
-                        # Check if the location already exists
                         if not Location.objects.filter(location_name=location_name, region=region).exists():
-                            # Create the location if it doesn't exist
                             Location.objects.create(location_name=location_name, region=region)
-                            print(f"Location '{location_name}' added successfully under region '{region_name}' (Region ID: {region.region_id}).")
+                            print(f"DEBUG: Created Location '{location_name}' under {region_name}")
                         else:
-                            print(f"Location '{location_name}' already exists under region '{region_name}'.")
-                
+                            print(f"DEBUG: Location '{location_name}' already exists under {region_name}")
                 except Region.DoesNotExist:
-                    print(f"Region with name '{region_name}' does not exist.")
+                    print(f"DEBUG: Region '{region_name}' missing")
                 except Exception as e:
-                    print(f"An error occurred: {e}")
-            
-            print('')
-            print("present keys =",groups[id]["affected_areas"].keys())    
+                    print(f"DEBUG: Error in southern branch: {e}")
+
+            print('DEBUG: Processing affected areas for group', id)
+            print("DEBUG: present keys =", list(groups[id].get("affected_areas", {}).keys()))
             for single_location in locations:
-                print
-                print("the current location",single_location)
-                print(affectedArea)
-                
+                print("DEBUG: iterating single_location group entry=", single_location)
+                print("DEBUG: affectedArea sample=", dict(list(affectedArea.items())[:3]) if isinstance(affectedArea, dict) else affectedArea)
+
                 from django.db import transaction, connection
 
-                # Example areas and their corresponding locations
                 areas = affectedAreas
-
                 try:
                     for entry in areas:
                         for singleLocation in entry:
-                            print("Entry:", singleLocation)
-
-                            # Ensure the location name exists in the affectedArea dictionary
+                            print("DEBUG: Entry location=", singleLocation)
                             if singleLocation not in affectedArea:
-                                print(f"No areas defined for location '{singleLocation}'.")
+                                print(f"DEBUG: No areas defined for location '{singleLocation}'.")
                                 continue
-
-                            # Extract area names
                             area_names = affectedArea[singleLocation]
-                            print("Area Names:", area_names)
-
+                            print("DEBUG: area_names=", area_names)
                             try:
-                                # Fetch all matching locations by name
                                 locationss = Location.objects.filter(location_name=singleLocation)
-
                                 if not locationss.exists():
-                                    print(f"No locations found with the name '{singleLocation}'.")
+                                    print(f"DEBUG: No locations found with the name '{singleLocation}'.")
                                     continue
-
-                                # Loop through all matching locations
                                 for location in locationss:
                                     for area_name in area_names:
                                         try:
                                             with transaction.atomic():
-                                                # Check if the area already exists for the location
                                                 if not Areas.objects.filter(area_name=area_name, location=location).exists():
                                                     Areas.objects.create(area_name=area_name, location=location)
-                                                    print(f"Area '{area_name}' added successfully under location '{singleLocation}'.")
+                                                    print(f"DEBUG: Created Area '{area_name}' under location '{singleLocation}'")
                                                 else:
-                                                    print(f"Area '{area_name}' already exists under location '{singleLocation}'.")
+                                                    print(f"DEBUG: Area '{area_name}' already exists under location '{singleLocation}'")
                                         except Exception as e:
-                                            print(f"An error occurred while processing area '{area_name}' under location '{singleLocation}': {e}")
+                                            print(f"DEBUG: Error creating area '{area_name}' for '{singleLocation}': {e}")
                             except Exception as e:
-                                print(f"An error occurred while processing location '{singleLocation}': {e}")
+                                print(f"DEBUG: Error processing location '{singleLocation}': {e}")
                 finally:
-                    connection.close() # Close the database connection
+                    connection.close()
 
+        groups_qs = Groups.objects.all()
+        print("DEBUG: Final groups in DB count=", groups_qs.count())
+        for group in groups_qs:
+            print("DEBUG: group_name=", group.group_name)
 
-                 
-        groups = Groups.objects.all()
-        for group in groups:
-            print(group.group_name)
+        print("DEBUG: Exiting ProgramView.post with success")
+        return Response({"status": "success", "groups_count": groups_qs.count()}, status=status.HTTP_201_CREATED)
         # data_cleaning = Datacleaning()
         # data_cleaning.clean_spaces(groups)
         
