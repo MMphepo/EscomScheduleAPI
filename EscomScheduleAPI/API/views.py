@@ -1,12 +1,13 @@
 from django.shortcuts import render
 from django.shortcuts import get_object_or_404
 import json
+import re
 # Create your views here.
 from psycopg2 import IntegrityError
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import Groups, Region, Location, GrpRegion, Areas
-from .serializers import GroupsSerializer, LocationSerializer, GrpRegionSerializer, AreasSerializer, RegionSerializer
+from .models import Groups, Region, Location, GrpRegion, Areas, Schedule, TimeSlot
+from .serializers import GroupsSerializer, LocationSerializer, GrpRegionSerializer, AreasSerializer, RegionSerializer, ScheduleSerializer, TimeSlotSerializer
 from rest_framework import status
 from django.db import transaction, connection
 
@@ -42,166 +43,97 @@ class ProgramView(APIView):
         json_data = request.data
         print("DEBUG: request.data type=", type(json_data))
         try:
-            data = json_data["data"]
+            data = json_data.get("data", {})
         except Exception as e:
             print("DEBUG: Failed to extract 'data' from request.data:", e)
             return Response({"error": "Invalid payload"}, status=status.HTTP_400_BAD_REQUEST)
 
-        print("DEBUG: extracted 'data' keys:", list(data.keys()) if isinstance(data, dict) else None)
-        groups = data.get("groups", {})
-        print("DEBUG: raw groups count=", len(groups) if isinstance(groups, dict) else 0)
-        groups = {oldkey.replace(' ', ''): newkey for oldkey, newkey in groups.items()}
-        print("DEBUG: normalized groups keys sample=", list(groups.keys())[:5])
-        grpkeys = groups.keys()
-        grpids = []
-        regiontypes = []
-        for key in grpkeys:
-            grpid = key[:7]  # 'GROUPA2'
-            regiontype = key[8:]
-            grpids.append(grpid)
-            regiontypes.append(regiontype)
-        print("DEBUG: parsed grpids=", grpids)
-        print("DEBUG: parsed regiontypes=", regiontypes)
+        groups = data.get("groups", {}) if isinstance(data, dict) else {}
+        print("DEBUG: groups keys=", list(groups.keys())[:10])
 
-        for name in set(grpids):  # Use `set` to avoid duplicate entries
-            group, created = Groups.objects.get_or_create(group_name=name)
-            print(f"DEBUG: group {name} ensured (created={created})")
+        # flexible separator: en-dash, em-dash or hyphen
+        sep_re = re.compile(r"\s*[–—-]\s*")
 
-        for name in set(regiontypes):  # Use `set` to avoid duplicate entries
-            region, created = Region.objects.get_or_create(region_name=name)
-            print(f"DEBUG: region {name} ensured (created={created})")
+        created_groups = 0
+        created_regions = 0
 
-        affectedAreas = []
-        allAreas = []
-        locations = []
-
-        # Insert into GrpRegion model
-        for grpid, regiontype in zip(grpids, regiontypes):
-            print(f"DEBUG: Processing GrpRegion pair: {grpid} - {regiontype}")
+        for raw_key, group_obj in groups.items():
+            print(f"DEBUG: raw group key='{raw_key}'")
             try:
-                group = Groups.objects.get(group_name=grpid)
-                region = Region.objects.get(region_name=regiontype)
+                parts = sep_re.split(raw_key)
+                left = parts[0].strip().upper() if parts else raw_key.strip().upper()
+                right = parts[1].strip().upper() if len(parts) > 1 else ""
 
-                grp_region, created = GrpRegion.objects.get_or_create(group=group, region=region)
-                print(f"DEBUG: GrpRegion {grpid}-{regiontype} (created={created})")
+                group_name_norm = left.replace(' ', '')
+                region_name_norm = right.replace(' ', '') if right else ""
 
-            except Groups.DoesNotExist:
-                print(f"DEBUG: Group '{grpid}' does not exist.")
-            except Region.DoesNotExist:
-                print(f"DEBUG: Region '{regiontype}' does not exist.")
-            except IntegrityError as e:
-                print(f"DEBUG: Integrity error occurred: {e}")
+                group, g_created = Groups.objects.get_or_create(group_name=group_name_norm)
+                if g_created:
+                    created_groups += 1
+                    print(f"DEBUG: Created group '{group_name_norm}'")
+
+                if region_name_norm:
+                    region, r_created = Region.objects.get_or_create(region_name=region_name_norm)
+                    if r_created:
+                        created_regions += 1
+                        print(f"DEBUG: Created region '{region_name_norm}'")
+                    GrpRegion.objects.get_or_create(group=group, region=region)
+
+                # Insert / ensure locations
+                locations_list = group_obj.get('locations', []) if isinstance(group_obj, dict) else []
+                for loc_name in locations_list:
+                    try:
+                        if region_name_norm:
+                            region_obj = Region.objects.get(region_name=region_name_norm)
+                            if not Location.objects.filter(location_name=loc_name, region=region_obj).exists():
+                                Location.objects.create(location_name=loc_name, region=region_obj)
+                                print(f"DEBUG: Created Location '{loc_name}' under region '{region_name_norm}'")
+                            else:
+                                print(f"DEBUG: Location '{loc_name}' already exists under region '{region_name_norm}'")
+                        else:
+                            if not Location.objects.filter(location_name=loc_name).exists():
+                                Location.objects.create(location_name=loc_name)
+                                print(f"DEBUG: Created Location '{loc_name}' (no region)")
+                            else:
+                                print(f"DEBUG: Location '{loc_name}' already exists (no region)")
+                    except Exception as e:
+                        print(f"DEBUG: Error creating location '{loc_name}': {e}")
+
+                # Insert affected areas
+                affected = group_obj.get('affected_areas', {}) if isinstance(group_obj, dict) else {}
+                for loc_name, area_names in affected.items():
+                    try:
+                        locations_qs = Location.objects.filter(location_name=loc_name)
+                        if not locations_qs.exists():
+                            print(f"DEBUG: No location found for '{loc_name}' when adding areas")
+                            continue
+                        for location in locations_qs:
+                            for area_name in area_names:
+                                try:
+                                    with transaction.atomic():
+                                        if not Areas.objects.filter(area_name=area_name, location=location).exists():
+                                            Areas.objects.create(area_name=area_name, location=location)
+                                            print(f"DEBUG: Created Area '{area_name}' under location '{loc_name}'")
+                                        else:
+                                            print(f"DEBUG: Area '{area_name}' already exists under location '{loc_name}'")
+                                except Exception as e:
+                                    print(f"DEBUG: Error creating area '{area_name}' for '{loc_name}': {e}")
+                    except Exception as e:
+                        print(f"DEBUG: Affected areas processing error for loc '{loc_name}': {e}")
+
+                # Schedule / times are logged (no model provided)
+                times = group_obj.get('times', []) if isinstance(group_obj, dict) else []
+                schedule = group_obj.get('schedule', {}) if isinstance(group_obj, dict) else {}
+                if times:
+                    print(f"DEBUG: Found times for group '{raw_key}': {times}")
+                if schedule:
+                    print(f"DEBUG: Found schedule mapping for group '{raw_key}': keys={list(schedule.keys())}")
+
             except Exception as e:
-                print(f"DEBUG: Unexpected error in GrpRegion loop: {e}")
-
-        # Loop through all groups and print affected areas and locations
-        for id in groups:
-            print(f"DEBUG: Processing group key: {id}")
-            affectedArea = groups[id].get("affected_areas", {})
-            print("DEBUG: affectedArea keys count=", len(affectedArea) if isinstance(affectedArea, dict) else 0)
-            affectedAreas.append(affectedArea)
-
-            print("DEBUG: Collecting locations for this group")
-            location = affectedArea.keys()
-            locations.append(location)
-            print("DEBUG: current locations list sample=", list(location)[:5])
-
-            # handle region-specific insertion
-            if id in ["GROUPA1–NORTHERNREGION", "GROUPB1–NORTHERNREGION", "GROUPC1–NORTHERNREGION"]:
-                print("DEBUG: northern branch for", id)
-                region_name = "NORTHERNREGION"
-                try:
-                    region = Region.objects.get(region_name=region_name)
-                    for singleLocation in location:
-                        location_name = singleLocation
-                        if not Location.objects.filter(location_name=location_name, region=region).exists():
-                            Location.objects.create(location_name=location_name, region=region)
-                            print(f"DEBUG: Created Location '{location_name}' under {region_name}")
-                        else:
-                            print(f"DEBUG: Location '{location_name}' already exists under {region_name}")
-                except Region.DoesNotExist:
-                    print(f"DEBUG: Region '{region_name}' missing")
-                except Exception as e:
-                    print(f"DEBUG: Error in northern branch: {e}")
-
-            if id in ("GROUPA1–CENTRALREGION", "GROUPB1–CENTRALREGION", "GROUPB2–CENTRALREGION", "GROUPC1–CENTRALREGION", "GROUPC2–CENTRALREGION"):
-                print("DEBUG: central branch for", id)
-                region_name = "CENTRALREGION"
-                try:
-                    region = Region.objects.get(region_name=region_name)
-                    for singleLocation in location:
-                        location_name = singleLocation
-                        if not Location.objects.filter(location_name=location_name, region=region).exists():
-                            Location.objects.create(location_name=location_name, region=region)
-                            print(f"DEBUG: Created Location '{location_name}' under {region_name}")
-                        else:
-                            print(f"DEBUG: Location '{location_name}' already exists under {region_name}")
-                except Region.DoesNotExist:
-                    print(f"DEBUG: Region '{region_name}' missing")
-                except Exception as e:
-                    print(f"DEBUG: Error in central branch: {e}")
-
-            if id in ("GROUPA1–SOUTHERNREGION", "GROUPA2–SOUTHERNREGION", "GROUPB1–SOUTHERNREGION", "GROUPB2–SOUTHERNREGION", "GROUPC2–SOUTHERNREGION"):
-                print("DEBUG: southern branch for", id)
-                region_name = "SOUTHERNREGION"
-                try:
-                    region = Region.objects.get(region_name=region_name)
-                    for singleLocation in set(location):
-                        location_name = singleLocation
-                        if not Location.objects.filter(location_name=location_name, region=region).exists():
-                            Location.objects.create(location_name=location_name, region=region)
-                            print(f"DEBUG: Created Location '{location_name}' under {region_name}")
-                        else:
-                            print(f"DEBUG: Location '{location_name}' already exists under {region_name}")
-                except Region.DoesNotExist:
-                    print(f"DEBUG: Region '{region_name}' missing")
-                except Exception as e:
-                    print(f"DEBUG: Error in southern branch: {e}")
-
-            print('DEBUG: Processing affected areas for group', id)
-            print("DEBUG: present keys =", list(groups[id].get("affected_areas", {}).keys()))
-            for single_location in locations:
-                print("DEBUG: iterating single_location group entry=", single_location)
-                print("DEBUG: affectedArea sample=", dict(list(affectedArea.items())[:3]) if isinstance(affectedArea, dict) else affectedArea)
-
-                from django.db import transaction, connection
-
-                areas = affectedAreas
-                try:
-                    for entry in areas:
-                        for singleLocation in entry:
-                            print("DEBUG: Entry location=", singleLocation)
-                            if singleLocation not in affectedArea:
-                                print(f"DEBUG: No areas defined for location '{singleLocation}'.")
-                                continue
-                            area_names = affectedArea[singleLocation]
-                            print("DEBUG: area_names=", area_names)
-                            try:
-                                locationss = Location.objects.filter(location_name=singleLocation)
-                                if not locationss.exists():
-                                    print(f"DEBUG: No locations found with the name '{singleLocation}'.")
-                                    continue
-                                for location in locationss:
-                                    for area_name in area_names:
-                                        try:
-                                            with transaction.atomic():
-                                                if not Areas.objects.filter(area_name=area_name, location=location).exists():
-                                                    Areas.objects.create(area_name=area_name, location=location)
-                                                    print(f"DEBUG: Created Area '{area_name}' under location '{singleLocation}'")
-                                                else:
-                                                    print(f"DEBUG: Area '{area_name}' already exists under location '{singleLocation}'")
-                                        except Exception as e:
-                                            print(f"DEBUG: Error creating area '{area_name}' for '{singleLocation}': {e}")
-                            except Exception as e:
-                                print(f"DEBUG: Error processing location '{singleLocation}': {e}")
-                finally:
-                    connection.close()
+                print(f"DEBUG: Error processing group '{raw_key}': {e}")
 
         groups_qs = Groups.objects.all()
         print("DEBUG: Final groups in DB count=", groups_qs.count())
-        for group in groups_qs:
-            print("DEBUG: group_name=", group.group_name)
-
         print("DEBUG: Exiting ProgramView.post with success")
         return Response({"status": "success", "groups_count": groups_qs.count()}, status=status.HTTP_201_CREATED)
         # data_cleaning = Datacleaning()
